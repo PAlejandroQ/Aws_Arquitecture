@@ -1,47 +1,47 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Despliegue Automatizado de Sistema RAG en EC2 con Ubuntu (Laboratorio)'
+Description: 'Automated RAG System Deployment on EC2 Ubuntu (Laboratory)'
 
 Parameters:
   InstanceType:
     Type: String
     Default: t2.micro
-    Description: 'Tipo de instancia EC2 (Free Tier: t2.micro)'
+    Description: 'EC2 instance type (Free Tier: t2.micro)'
 
   KeyName:
     Type: String
     Default: RAG-Key-CFN
-    Description: 'Nombre del Key Pair para acceso SSH'
+    Description: 'Key Pair name for SSH access'
 
   LatestAmiId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/canonical/ubuntu/server/20.04/stable/current/amd64/hvm/ebs-gp2/ami-id
-    Description: 'AMI más reciente de Ubuntu Server 20.04 LTS'
+    Description: 'Latest Ubuntu Server 20.04 LTS AMI'
 
 Resources:
-  # 1. Key Pair para acceso SSH
+  # 1. SSH Key Pair
   RAGKeyPair:
     Type: AWS::EC2::KeyPair
     Properties:
       KeyName: !Ref KeyName
 
-  # 2. Security Group (Firewall virtual)
+  # 2. Security Group (Virtual Firewall)
   RAGSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: 'Habilitar acceso SSH y API RAG'
+      GroupDescription: 'Enable SSH and RAG API access'
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
           CidrIp: 0.0.0.0/0
-          Description: 'Puerto SSH para acceso administrativo'
+          Description: 'SSH port for administrative access'
         - IpProtocol: tcp
           FromPort: 8000
           ToPort: 8000
           CidrIp: 0.0.0.0/0
-          Description: 'Puerto API para el servicio RAG'
+          Description: 'API port for RAG service'
 
-  # 3. EC2 Instance con User Data
+  # 3. EC2 Instance with User Data
   RAGInstance:
     Type: AWS::EC2::Instance
     Properties:
@@ -60,50 +60,50 @@ Resources:
       UserData:
         Fn::Base64: |
           #!/bin/bash
-          # Script de inicialización para el laboratorio RAG en EC2 Ubuntu
+          # AWS RAG Laboratory - EC2 Ubuntu Initialization Script
 
-          # 1. Actualizar el sistema e instalar dependencias básicas
+          # 1. Update system and install basic dependencies
           sudo apt update -y
           sudo apt upgrade -y
           sudo apt install -y python3 python3-pip git
 
-          # 2. Instalar el gestor de paquetes de Python
+          # 2. Upgrade Python package manager
           sudo pip3 install --upgrade pip
 
-          # 3. Clonar el proyecto RAG de demostración
-          # NOTA: Reemplaza con la URL de tu repositorio real de GitHub
-          git clone https://github.com/tu_usuario/tu_proyecto_rag.git /home/ubuntu/rag-demo
-          chown -R ubuntu:ubuntu /home/ubuntu/rag-demo
-          cd /home/ubuntu/rag-demo
+          # 3. Clone the RAG demo project
+          # NOTE: Replace with your actual GitHub repository URL
+          # git clone https://github.com/your_username/your_rag_project.git /home/ubuntu/rag-demo
+          # chown -R ubuntu:ubuntu /home/ubuntu/rag-demo
+          # cd /home/ubuntu/rag-demo
 
-          # 4. Instalar librerías de Python desde requirements.txt
-          sudo pip3 install -r requirements.txt
+          # 4. Install Python libraries from requirements.txt
+          # sudo pip3 install -r requirements.txt
 
-          # 5. Ejecutar la API en segundo plano
-          # Para el laboratorio usamos un servidor de desarrollo simple
-          nohup python3 app.py &
+          # 5. Run the API in background
+          # For the lab we use a simple development server
+          # nohup python3 app.py &
 
 Outputs:
   InstanceId:
-    Description: 'ID de la instancia EC2'
+    Description: 'EC2 instance ID'
     Value: !Ref RAGInstance
     Export:
       Name: !Sub '${AWS::StackName}-InstanceId'
 
   PublicIP:
-    Description: 'IP pública de la instancia RAG'
+    Description: 'Public IP of the RAG instance'
     Value: !GetAtt RAGInstance.PublicIp
     Export:
       Name: !Sub '${AWS::StackName}-PublicIP'
 
   KeyPairName:
-    Description: 'Nombre del Key Pair creado'
+    Description: 'Created Key Pair name'
     Value: !Ref RAGKeyPair
     Export:
       Name: !Sub '${AWS::StackName}-KeyPair'
 
   SecurityGroupId:
-    Description: 'ID del Security Group'
+    Description: 'Security Group ID'
     Value: !Ref RAGSecurityGroup
     Export:
       Name: !Sub '${AWS::StackName}-SecurityGroup'
