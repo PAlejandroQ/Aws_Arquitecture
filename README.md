@@ -195,7 +195,6 @@ Outputs:
 ## Files Description
 
 - `rag-cfn.yaml` - **CloudFormation template** (the star of the show!)
-- `setup-rag.sh` - User Data script for automated instance configuration
 - `deploy-cfn.sh` - Simple deployment script
 - `cleanup-cfn.sh` - Simple cleanup script
 
@@ -206,19 +205,19 @@ Outputs:
 3. **Wait for the instance to initialize** (5-10 minutes)
 4. **Get the public IP**:
    ```bash
-   aws cloudformation describe-stacks --stack-name RAG-Stack-CFN --query 'Stacks[0].Outputs[?OutputKey==`PublicIP`].OutputValue' --output text
+   PUBLIC_IP=$(aws cloudformation describe-stacks --stack-name RAG-Stack-CFN --query 'Stacks[0].Outputs[?OutputKey==`PublicIP`].OutputValue' --output text)
    ```
 5. **SSH into the instance**:
    ```bash
-   ssh -i RAG-Key-CFN.pem ubuntu@[PUBLIC_IP]
+   ssh -i RAG-Key-CFN.pem ubuntu@$PUBLIC_IP
    ```
 6. **Test the API** (port 8000 is open):
    ```bash
    # Health check
-   curl http://[PUBLIC_IP]:8000/
+   bash curl http://$PUBLIC_IP:8000/
 
    # Query document using RAG
-   curl -X POST http://[PUBLIC_IP]:8000/query \
+   curl -X POST http://$PUBLIC_IP:8000/query \
      -H "Content-Type: application/json" \
      -d '{"question": "In what case is the spouse's succession inadmissible?"}'
    ```
