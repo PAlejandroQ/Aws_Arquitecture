@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Despliegue Automatizado de Sistema RAG en EC2 con Ubuntu (Laboratorio)'
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: 'Tipo de instancia EC2 (Free Tier: t2.micro)'
+
+  KeyName:
+    Type: String
+    Default: RAG-Key-CFN
+    Description: 'Nombre del Key Pair para acceso SSH'
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/20.04/stable/current/amd64/hvm/ebs-gp2/ami-id
+    Description: 'AMI más reciente de Ubuntu Server 20.04 LTS'
+
+Resources:
+  # 1. Key Pair para acceso SSH
+  RAGKeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Ref KeyName
+
+  # 2. Security Group (Firewall virtual)
+  RAGSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'Habilitar acceso SSH y API RAG'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+          Description: 'Puerto SSH para acceso administrativo'
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+          Description: 'Puerto API para el servicio RAG'
+
+  # 3. EC2 Instance con User Data
+  RAGInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      KeyName: !Ref RAGKeyPair
+      SecurityGroupIds:
+        - !Ref RAGSecurityGroup
+      Tags:
+        - Key: Name
+          Value: RAG-CFN-Instance
+        - Key: Environment
+          Value: Lab
+        - Key: Project
+          Value: RAG-Demo
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          # Script de inicialización para el laboratorio RAG en EC2 Ubuntu
+
+          # 1. Actualizar el sistema e instalar dependencias básicas
+          sudo apt update -y
+          sudo apt upgrade -y
+          sudo apt install -y python3 python3-pip git
+
+          # 2. Instalar el gestor de paquetes de Python
+          sudo pip3 install --upgrade pip
+
+          # 3. Clonar el proyecto RAG de demostración
+          # NOTA: Reemplaza con la URL de tu repositorio real de GitHub
+          git clone https://github.com/tu_usuario/tu_proyecto_rag.git /home/ubuntu/rag-demo
+          chown -R ubuntu:ubuntu /home/ubuntu/rag-demo
+          cd /home/ubuntu/rag-demo
+
+          # 4. Instalar librerías de Python desde requirements.txt
+          sudo pip3 install -r requirements.txt
+
+          # 5. Ejecutar la API en segundo plano
+          # Para el laboratorio usamos un servidor de desarrollo simple
+          nohup python3 app.py &
+
+Outputs:
+  InstanceId:
+    Description: 'ID de la instancia EC2'
+    Value: !Ref RAGInstance
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
+
+  PublicIP:
+    Description: 'IP pública de la instancia RAG'
+    Value: !GetAtt RAGInstance.PublicIp
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicIP'
+
+  KeyPairName:
+    Description: 'Nombre del Key Pair creado'
+    Value: !Ref RAGKeyPair
+    Export:
+      Name: !Sub '${AWS::StackName}-KeyPair'
+
+  SecurityGroupId:
+    Description: 'ID del Security Group'
+    Value: !Ref RAGSecurityGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-SecurityGroup'
