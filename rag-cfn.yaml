@@ -44,6 +44,12 @@ Resources:
       KeyName: !Ref KeyName
       SecurityGroupIds:
         - !Ref RAGSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp2
+            DeleteOnTermination: true
       Tags:
         - Key: Name
           Value: RAG-CFN-Instance
