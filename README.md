@@ -1,83 +1,250 @@
-Esta es una excelente estrategia. Utilizar AWS CLI no solo es más preciso y detallado para una exposición técnica, sino que también establece la base para la automatización. La restricción de costos es crítica, por lo que nos enfocaremos en recursos elegibles para la **Capa Gratuita (Free Tier)** de AWS para el laboratorio.
 
-A continuación, presento la estructura de la exposición/laboratorio, diferenciando el **Caso Lab (Bajo Costo)** del **Caso Real (Producción)**.
+# AWS RAG Deployment Laboratory - CloudFormation Focus
 
----
+This laboratory demonstrates Infrastructure as Code (IaC) using AWS CloudFormation to deploy a complete Retrieval-Augmented Generation (RAG) system. Learn how a single YAML template can provision all necessary AWS resources automatically.
 
-## Estructura de la Exposición/Laboratorio: Despliegue RAG con AWS CLI y CloudFormation
+## Prerequisites
 
-### I. Introducción y Fundamentos (5 min)
+- AWS CLI configured with appropriate permissions
+- Basic understanding of AWS services and CloudFormation concepts
 
-| Tema | Puntos Clave a Detallar |
-| :--- | :--- |
-| **A. RAG y el Problema del Despliegue** | 1. **Motivación:** Por qué RAG (datos privados, actualidad, citación). 2. **Componentes:** *Retriever* (Base de Vectores) y *Generator* (LLM/API). |
-| **B. AWS EC2: La Plataforma** | 1. **Definición:** Cómputo escalable y control total. 2. **Modelo de Precios:** Introducir *Free Tier* como mecanismo para el Lab. |
-| **C. AWS CLI y CloudFormation** | 1. **CLI:** Interacción programática y detallada (Ideal para Lab). 2. **CloudFormation (IaC):** Automatización, consistencia y gestión de costos a largo plazo (el objetivo final). |
+## What is CloudFormation?
 
----
+**AWS CloudFormation** is AWS's Infrastructure as Code service that allows you to define and provision 
+AWS infrastructure using declarative templates. Instead of manually creating resources through the 
+console or CLI, you describe what you want in a template, and CloudFormation handles the creation, 
+updating, and deletion of resources.
 
-### II. Laboratorio 1: Configuración Paso a Paso con AWS CLI (20-25 min)
+**Important:** When using CloudFormation, you must create the SSH key pair manually before deploying the stack. CloudFormation cannot provide you with the private key file (`.pem`).
 
-En esta fase, crearemos los componentes de infraestructura en el orden correcto, utilizando **recursos Free Tier** (ej. `t2.micro`, Amazon Linux, 8 GB de EBS) para cumplir con la restricción de $50.
+### Key Benefits:
+- **Declarative**: Describe *what* you want, not *how* to create it
+- **Repeatable**: Deploy the same infrastructure consistently
+- **Version Controlled**: Templates can be stored in Git
+- **Dependency Management**: CloudFormation handles resource dependencies automatically
+- **Rollback**: Automatic rollback on deployment failures
 
-#### **1. Seguridad y Acceso (El requisito SSH)**
+```bash
+aws ec2 create-key-pair --key-name RAG-Key-CFN --query 'KeyMaterial' --output text > RAG-Key-CFN.pem
+chmod 400 RAG-Key-CFN.pem
+```
+- This creates the key pair in AWS and saves the private key locally for SSH access.
 
-| Concepto AWS | Comando AWS CLI (Lab Case) | Detalle y Explicación |
-| :--- | :--- | :--- |
-| **Par de Claves (Key Pair)** | `aws ec2 create-key-pair --key-name RAG-Key-Lab --query 'KeyMaterial' --output text > RAG-Key-Lab.pem` | **Detalle:** La llave privada (`.pem`) es la única forma de autenticarse via SSH. |
-| **Grupo de Seguridad (SG)** | 1. `aws ec2 create-security-group --group-name RAG-SG --description "Allow SSH and API"` | **Detalle:** Actúa como un firewall virtual. Necesitamos abrir puertos. |
-| **Reglas de Entrada (Ingress)** | 2. `aws ec2 authorize-security-group-ingress --group-name RAG-SG --protocol tcp --port 22 --cidr 0.0.0.0/0` (Para demo) / **Real:** `192.168.1.1/32` (solo tu IP) | **Detalle:** Abrir **Puerto 22 (SSH)**. **Caso Real:** Limitar a IPs específicas. |
-| **Regla para la API** | 3. `aws ec2 authorize-security-group-ingress --group-name RAG-SG --protocol tcp --port 8000 --cidr 0.0.0.0/0` | **Detalle:** Abrir el puerto donde se expondrá el servidor FastAPI/Flask del RAG (ej. 8000). |
+Deploy the complete RAG infrastructure with a single command:
 
-#### **2. Creación y Configuración de la EC2**
+```bash
+./deploy-cfn.sh
+```
 
-| Concepto AWS | Comando AWS CLI (Lab Case) | Detalle y Explicación |
-| :--- | :--- | :--- |
-| **Obtener AMI** | `aws ec2 describe-images --owners amazon --filters "Name=name,Values=amzn2-ami-hvm-2.0.????????-x86_64-gp2" --query 'sort_by(Images, &CreationDate)[-1].ImageId' --output text` | **Detalle:** Necesitas el ID de la AMI (Amazon Machine Image). Usamos Amazon Linux 2 (o 2023) por ser ligero y apto para Free Tier. |
-| **Script de Inicialización**| **(User Data)** – Contiene comandos de *bootstrap* que ejecutan: `sudo yum update -y`, `sudo yum install python3 -y`, `git clone <repo_rag>`, `pip install -r requirements.txt`, `nohup python3 api.py &` | **Detalle:** El *User Data* es crucial para la automatización. Instala Python, clona el proyecto RAG (que usa una Base de Vectores *in-memory* como FAISS) y lo inicia como servicio en segundo plano. |
-| **Lanzar Instancia** | `aws ec2 run-instances --image-id <AMI_ID> --count 1 --instance-type t2.micro --key-name RAG-Key-Lab --security-group-ids <SG_ID> --user-data file://./setup-rag.sh` | **Detalle:** Se lanza la instancia Free Tier (`t2.micro`), vinculando la llave de acceso y el Grupo de Seguridad. **Caso Real:** Se usaría un tipo de instancia **G-family** (ej. `g5.xlarge`) con GPU para modelos grandes. |
+This executes:
+```bash
+aws cloudformation deploy --template-file rag-cfn.yaml --stack-name RAG-Stack-CFN --capabilities CAPABILITY_NAMED_IAM
+```
 
-#### **3. Conexión y Verificación**
+## Architecture Overview
 
-| Concepto AWS | Comando AWS CLI | Detalle y Explicación |
-| :--- | :--- | :--- |
-| **Obtener IP Pública** | `aws ec2 describe-instances --filters "Name=instance-state-name,Values=running" --query 'Reservations[].Instances[].PublicIpAddress' --output text` | **Detalle:** Necesitamos la IP para la conexión y para probar la API. |
-| **Conexión SSH** | `ssh -i RAG-Key-Lab.pem ec2-user@<IP_PUBLICA>` | **Detalle:** Conectarse para verificar logs o realizar ajustes finales. |
-| **Prueba de API** | `curl -X POST http://<IP_PUBLICA>:8000/api/rag -H "Content-Type: application/json" -d '{"prompt": "¿Qué es AWS EC2?"}'` | **Detalle:** Verificar que la API de RAG está respondiendo correctamente desde fuera de la instancia. |
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   User/Client   │────│   Security      │────│   Ubuntu EC2    │
+│   (Browser/CLI) │    │   Group (SG)    │    │   Instance      │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                        │
+                                                        │ Docker Compose
+                                                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Docker Containers                        │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │     Ollama      │  │  Elasticsearch  │  │   FastAPI RAG  │ │
+│  │   (LLM Server)  │  │ (Vector Store)  │  │     API App     │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
 
----
+- **Port 22** is open for SSH access (using your manually created key)
+- **Port 8000** is open to the internet for API access
 
-### III. CloudFormation: La Automatización (10-15 min)
+## CloudFormation Template Deep Dive
 
-El objetivo final es pasar de la ejecución manual de múltiples comandos CLI a un solo archivo de **Infraestructura como Código (IaC)**.
+Let's break down the `rag-cfn.yaml` template step by step:
 
-1.  **Motivación de CloudFormation (CFN):**
-    * **Punto Clave:** El CLI crea recursos individuales. CFN crea **Stacks** (pilas), gestionando todos los recursos como una unidad (creación, actualización y eliminación). Es clave para la reproducibilidad.
-2.  **Estructura de la Plantilla YAML (Template):**
-    * Explicar la división: `Parameters` (entrada del usuario), `Resources` (los componentes AWS), y `Outputs` (datos importantes).
-3.  **Mapeo de Recursos (Ejemplo):**
-    * Mostrar cómo los comandos CLI se traducen en recursos CFN:
-        * El comando `aws ec2 create-key-pair...` se convierte en un recurso `AWS::EC2::KeyPair`.
-        * El `Security Group` se convierte en `AWS::EC2::SecurityGroup`.
-        * El `run-instances` se convierte en `AWS::EC2::Instance`, y el *User Data* se inserta directamente en la propiedad `UserData`.
-4.  **Despliegue con CLI:**
-    * **Punto Clave:** Mostrar el comando final que condensa todo el proceso.
-    * `aws cloudformation deploy --template-file rag-stack.yaml --stack-name RAG-Lab-Deployment`
-5.  **Limpieza:**
-    * Enfatizar la facilidad para la gestión de costos: `aws cloudformation delete-stack --stack-name RAG-Lab-Deployment`.
+### 1. Template Header
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Automated RAG System Deployment on EC2 Ubuntu (Laboratory)'
+```
+- **AWSTemplateFormatVersion**: Specifies the template format version
+- **Description**: Human-readable description of what this template does
 
----
+### 2. Parameters Section
+```yaml
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: 'EC2 instance type (Free Tier: t2.micro)'
 
-### IV. Discusión: Del Lab al Caso Real (5 min)
+  KeyName:
+    Type: String
+    Default: RAG-Key-CFN
+    Description: 'Key Pair name for SSH access'
 
-Este es el momento de verbalizar los cambios que se harían en un proyecto de producción, justificando por qué el *Lab Case* es limitado.
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/20.04/stable/current/amd64/hvm/ebs-gp2/ami-id
+    Description: 'Latest Ubuntu Server 20.04 LTS AMI'
+```
+**Parameters** allow customization without changing the template:
+- **InstanceType**: What size EC2 instance to use (t2.micro for Free Tier)
+- **KeyName**: Name for the SSH key pair
+- **LatestAmiId**: Uses AWS Systems Manager Parameter Store to get the latest Ubuntu AMI automatically
 
-| Componente | Caso Lab (Bajo Costo/t2.micro) | Caso Real (Producción) |
-| :--- | :--- | :--- |
-| **Cómputo (EC2)** | Instancia `t2.micro` (CPU). | Instancia **G-Family** (GPU, ej. `g5.xlarge`) o **P-Family** para modelos *on-premises*. |
-| **Modelo de IA (LLM)** | Modelo pequeño Open Source (Llama 3 8B) ejecutado con Ollama en CPU, o API externa gratuita (con riesgo de cuotas). | **Amazon Bedrock API** (Modelos Claude, Llama 3) o **Amazon SageMaker Endpoint** para modelos propios o *fine-tuned*. |
-| **Base de Vectores** | Base de datos local/en memoria (FAISS, ChromaDB local). | **Amazon OpenSearch Serverless** o **Aurora RDS con pgvector** para escalabilidad y persistencia. |
-| **Exposición API** | FastAPI/Flask ejecutado directamente en EC2 con `nohup`. | **Application Load Balancer (ALB)** + **Auto Scaling Group** para manejar alto tráfico y *health checks*. |
-| **Contenedorización** | No se utiliza. | **Docker** y **Amazon ECS/EKS** para mejor portabilidad y gestión del *deployment*. |
+### 3. Resources Section - The Heart of CloudFormation
 
-**En resumen:** En el laboratorio probamos la **funcionalidad (Proof of Concept)** con EC2/CLI. En el **Caso Real**, reemplazamos los componentes locales por **servicios gestionados** (Bedrock, OpenSearch, ALB) para garantizar **rendimiento, escalabilidad y alta disponibilidad**.
+#### 3.1 SSH Key Pair
+```yaml
+RAGKeyPair:
+  Type: AWS::EC2::KeyPair
+  Properties:
+    KeyName: !Ref KeyName
+```
+- **Type**: Specifies this is an EC2 Key Pair resource
+- **Properties**: Configuration for the resource
+- **!Ref KeyName**: References the KeyName parameter value
+
+#### 3.2 Security Group (Virtual Firewall)
+```yaml
+RAGSecurityGroup:
+  Type: AWS::EC2::SecurityGroup
+  Properties:
+    GroupDescription: 'Enable SSH and RAG API access'
+    SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+        Description: 'SSH port for administrative access'
+      - IpProtocol: tcp
+        FromPort: 8000
+        ToPort: 8000
+        CidrIp: 0.0.0.0/0
+        Description: 'API port for RAG service'
+```
+- **SecurityGroupIngress**: Defines inbound traffic rules
+- **CidrIp: 0.0.0.0/0**: Allows access from anywhere (for demo purposes)
+- **FromPort/ToPort**: Port ranges (single port when equal)
+
+#### 3.3 EC2 Instance - The Main Compute Resource
+```yaml
+RAGInstance:
+  Type: AWS::EC2::Instance
+  Properties:
+    InstanceType: !Ref InstanceType
+    ImageId: !Ref LatestAmiId
+    KeyName: !Ref RAGKeyPair
+    SecurityGroupIds:
+      - !Ref RAGSecurityGroup
+    Tags:
+      - Key: Name
+        Value: RAG-CFN-Instance
+      - Key: Environment
+        Value: Lab
+      - Key: Project
+        Value: RAG-Demo
+    UserData: # <-- This is where the magic happens!
+```
+- **ImageId**: References the Ubuntu AMI parameter
+- **KeyName**: References the created key pair
+- **SecurityGroupIds**: References the security group
+- **Tags**: Metadata for organization and cost tracking
+
+##### UserData - Automated Instance Configuration
+The **UserData** property contains a bash script that runs automatically when the instance starts:
+
+```bash
+#!/bin/bash
+# 1. Update system and install Docker
+# 2. Clone the RAG project from GitHub
+# 3. Start everything with docker compose up --build -d
+```
+
+This script:
+1. **Installs Docker** on the Ubuntu instance
+2. **Clones** the RAG project from [https://github.com/PAlejandroQ/Puc_RAG.git](https://github.com/PAlejandroQ/Puc_RAG.git)
+3. **Starts the application** using `docker compose up --build -d`
+
+### 4. Outputs Section
+```yaml
+Outputs:
+  InstanceId:
+    Description: 'EC2 instance ID'
+    Value: !Ref RAGInstance
+    Export:
+      Name: !Sub '${AWS::StackName}-InstanceId'
+
+  PublicIP:
+    Description: 'Public IP of the RAG instance'
+    Value: !GetAtt RAGInstance.PublicIp
+    Export:
+      Name: !Sub '${AWS::StackName}-PublicIP'
+```
+- **Outputs** expose important information after deployment
+- **!Ref RAGInstance**: Gets the instance ID
+- **!GetAtt RAGInstance.PublicIp**: Gets the public IP address
+- **Export**: Makes these values available to other CloudFormation stacks
+
+## Files Description
+
+- `rag-cfn.yaml` - **CloudFormation template** (the star of the show!)
+- `setup-rag.sh` - User Data script for automated instance configuration
+- `deploy-cfn.sh` - Simple deployment script
+- `cleanup-cfn.sh` - Simple cleanup script
+
+## Deployment Process
+
+1. **Create the SSH key pair** (see above)
+2. **Deploy the stack** (`./deploy-cfn.sh`)
+3. **Wait for the instance to initialize** (5-10 minutes)
+4. **Get the public IP**:
+   ```bash
+   aws cloudformation describe-stacks --stack-name RAG-Stack-CFN --query 'Stacks[0].Outputs[?OutputKey==`PublicIP`].OutputValue' --output text
+   ```
+5. **SSH into the instance**:
+   ```bash
+   ssh -i RAG-Key-CFN.pem ubuntu@[PUBLIC_IP]
+   ```
+6. **Test the API** (port 8000 is open):
+   ```bash
+   # Health check
+   curl http://[PUBLIC_IP]:8000/
+
+   # Query document using RAG
+   curl -X POST http://[PUBLIC_IP]:8000/query \
+     -H "Content-Type: application/json" \
+     -d '{"question": "In what case is the spouse's succession inadmissible?"}'
+   ```
+
+## Cleanup
+
+Remove all resources with a single command:
+
+```bash
+./cleanup-cfn.sh
+```
+
+This executes:
+```bash
+aws cloudformation delete-stack --stack-name RAG-Stack-CFN
+```
+
+CloudFormation automatically handles resource deletion in the correct order.
+
+## Key Takeaways
+
+1. **One YAML file** = Complete infrastructure deployment
+2. **Declarative approach**: Describe desired state, AWS handles implementation
+3. **Dependency management**: CloudFormation creates resources in correct order
+4. **Automated cleanup**: Single command removes everything
+5. **Version control**: Infrastructure changes can be tracked in Git
+6. **Reusable**: Same template can deploy multiple environments
+
+This approach transforms complex multi-step deployments into simple, reliable, and repeatable infrastructure management!

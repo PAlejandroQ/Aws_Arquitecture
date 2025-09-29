@@ -1,27 +1,39 @@
 #!/bin/bash
-# Script de inicialización para el laboratorio RAG en EC2 Ubuntu
-# Este script se ejecuta automáticamente al iniciar la instancia EC2
+# AWS RAG Laboratory - EC2 Ubuntu Initialization Script
+# This script runs automatically when the EC2 instance starts
+# It installs Docker and deploys the RAG application using Docker Compose
 
-# 1. Actualizar el sistema e instalar dependencias básicas
+# 1. Update system and install basic dependencies
 sudo apt update -y
 sudo apt upgrade -y
-sudo apt install -y python3 python3-pip git
+sudo apt install -y ca-certificates curl gnupg lsb-release git
 
-# 2. Instalar el gestor de paquetes de Python (pip ya viene con python3-pip)
-sudo pip3 install --upgrade pip
+# 2. Install Docker
+# Add Docker's official GPG key
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 
-# 3. Clonar el proyecto RAG de demostración
-# NOTA: Reemplaza con la URL de tu repositorio real de GitHub
-git clone https://github.com/tu_usuario/tu_proyecto_rag.git /home/ubuntu/rag-demo
-chown -R ubuntu:ubuntu /home/ubuntu/rag-demo
-cd /home/ubuntu/rag-demo
+# Add Docker repository
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# 4. Instalar librerías de Python desde requirements.txt
-sudo pip3 install -r requirements.txt
+# Install Docker Engine
+sudo apt update -y
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-# 5. Ejecutar la API en segundo plano
-# Para el laboratorio usamos un servidor de desarrollo simple
-# En producción se usaría Gunicorn/Uvicorn con nginx
-nohup python3 app.py &
+# Start and enable Docker service
+sudo systemctl start docker
+sudo systemctl enable docker
 
-# El script termina aquí, pero la API sigue ejecutándose en segundo plano
+# Add ubuntu user to docker group (optional, for convenience)
+sudo usermod -aG docker ubuntu
+
+# 3. Clone the RAG project from GitHub
+cd /home/ubuntu
+git clone https://github.com/PAlejandroQ/Puc_RAG.git rag-demo
+chown -R ubuntu:ubuntu rag-demo
+cd rag-demo
+
+# 4. Start the RAG application using Docker Compose
+# This will build and start all services: Ollama, Elasticsearch, and the FastAPI app
+sudo docker compose up --build -d
+
+# Script ends here - the application continues running in Docker containers
