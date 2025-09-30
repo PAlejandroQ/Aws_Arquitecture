@@ -89,13 +89,13 @@ Resources:
 
           # 3. Clone the RAG project from GitHub
           cd /home/ubuntu
-          git clone https://github.com/PAlejandroQ/Puc_RAG.git rag-demo
-          chown -R ubuntu:ubuntu rag-demo
-          cd rag-demo
+          # git clone https://github.com/PAlejandroQ/Puc_RAG.git rag-demo
+          # chown -R ubuntu:ubuntu rag-demo
+          # cd rag-demo
 
           # 4. Start the RAG application using Docker Compose
           # This will build and start all services: Ollama, Elasticsearch, and the FastAPI app
-          sudo docker compose up --build -d
+          # sudo docker compose up --build -d
 
 Outputs:
   InstanceId:
