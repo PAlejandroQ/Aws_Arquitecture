@@ -7,6 +7,13 @@ This laboratory demonstrates Infrastructure as Code (IaC) using AWS CloudFormati
 
 - AWS CLI configured with appropriate permissions
 - Basic understanding of AWS services and CloudFormation concepts
+- **For Windows/PowerShell users:**
+    - Open PowerShell as Administrator (or con permisos suficientes)
+    - Permitir la ejecución de scripts temporales con:
+      ```powershell
+      Set-ExecutionPolicy RemoteSigned -Scope Process
+      ```
+    - Tener instalado OpenSSH (incluido en Windows 10+)
 
 ## What is CloudFormation?
 
@@ -32,8 +39,14 @@ chmod 400 RAG-Key-CFN.pem
 
 Deploy the complete RAG infrastructure with a single command:
 
+**Linux/macOS (Bash):**
 ```bash
 ./deploy-cfn.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\deploy-cfn.ps1
 ```
 
 This executes:
@@ -195,22 +208,48 @@ Outputs:
 ## Files Description
 
 - `rag-cfn.yaml` - **CloudFormation template** (the star of the show!)
-- `deploy-cfn.sh` - Simple deployment script
-- `cleanup-cfn.sh` - Simple cleanup script
+- `deploy-cfn.sh` - Simple deployment script (Bash)
+- `deploy-cfn.ps1` - Simple deployment script (PowerShell)
+- `cleanup-cfn.sh` - Simple cleanup script (Bash)
+- `cleanup-cfn.ps1` - Simple cleanup script (PowerShell)
+- `ssh-connect.ps1` - Script to retrieve public IP and connect via SSH (PowerShell)
+- `setup-rag.sh` - EC2 initialization script (runs on Ubuntu instance)
+- `.gitignore` - Ignore sensitive files (e.g., *.pem)
 
 ## Deployment Process
 
 1. **Create the SSH key pair** (see above)
-2. **Deploy the stack** (`./deploy-cfn.sh`)
+2. **Deploy the stack**
+   - **Bash:** `./deploy-cfn.sh`
+   - **PowerShell:** `./deploy-cfn.ps1`
 3. **Wait for the instance to initialize** (5-10 minutes)
 4. **Get the public IP**:
-   ```bash
-   PUBLIC_IP=$(aws cloudformation describe-stacks --stack-name RAG-Stack-CFN --query 'Stacks[0].Outputs[?OutputKey==`PublicIP`].OutputValue' --output text)
-   ```
+   - **Bash:**
+     ```bash
+     PUBLIC_IP=$(aws cloudformation describe-stacks --stack-name RAG-Stack-CFN --query 'Stacks[0].Outputs[?OutputKey==`PublicIP`].OutputValue' --output text)
+     ```
+   - **PowerShell:**
+     ```powershell
+     $PUBLIC_IP = aws cloudformation describe-stacks --stack-name RAG-Stack-CFN --query "Stacks[0].Outputs[?OutputKey=='PublicIP'].OutputValue" --output text
+     $env:RAG_PUBLIC_IP = $PUBLIC_IP
+     ```
+   - **O usa el script automatizado:**
+     ```powershell
+     .\ssh-connect.ps1
+     ```
 5. **SSH into the instance**:
-   ```bash
-   ssh -i RAG-Key-CFN.pem ubuntu@$PUBLIC_IP
-   ```
+   - **Bash:**
+     ```bash
+     ssh -i RAG-Key-CFN.pem ubuntu@$PUBLIC_IP
+     ```
+   - **PowerShell:**
+     ```powershell
+     ssh -i RAG-Key-CFN.pem ubuntu@$env:RAG_PUBLIC_IP
+     ```
+   - **O simplemente ejecuta:**
+     ```powershell
+     .\ssh-connect.ps1
+     ```
 6. **Test the API** (port 8000 is open):
    ```bash
    # Health check
@@ -226,13 +265,13 @@ Outputs:
 
 Remove all resources with a single command:
 
+**Bash:**
 ```bash
 ./cleanup-cfn.sh
 ```
-
-This executes:
-```bash
-aws cloudformation delete-stack --stack-name RAG-Stack-CFN
+**PowerShell:**
+```powershell
+.\cleanup-cfn.ps1
 ```
 
 CloudFormation automatically handles resource deletion in the correct order.
